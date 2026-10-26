@@ -357,7 +357,7 @@ int64_t GetFAGTilingParam(const FAGInfo &fagInfo, uint32_t aicNum, uint32_t aivN
         fagTilingData.qSeqlen = *std::max_element(fagTilingData.actualSeqQlen.begin(), fagTilingData.actualSeqQlen.end());
         fagTilingData.kvSeqlen = *std::max_element(fagTilingData.actualSeqKvlen.begin(), fagTilingData.actualSeqKvlen.end());
     } else {
-        fagTilingData.layoutType = BSND;
+        fagTilingData.layoutType = fagInfo.layout;
     }
 
     fagTilingData.s1Align = (fagTilingData.qSeqlen + INPUT_ALIGN - 1) / INPUT_ALIGN * INPUT_ALIGN;

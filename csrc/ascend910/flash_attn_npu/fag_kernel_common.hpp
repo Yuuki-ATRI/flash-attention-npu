@@ -4,9 +4,11 @@
 // BSND/TND layout constants live in the self-contained fag_layout.hpp so the
 // light dispatch/stub TUs can use the named constants without this header's
 // kernel-header prerequisites.
+#include "../../fag_tensor_strides.h"
 #include "fag_layout.hpp"
 
 struct FAGTilingData {
+    FagInputStrides inputStrides{};
     int64_t coreNum;
     int64_t aicNum;
     uint64_t ubSize;

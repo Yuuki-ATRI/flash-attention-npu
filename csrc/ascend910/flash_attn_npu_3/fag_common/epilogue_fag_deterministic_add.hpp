@@ -206,7 +206,7 @@ public:
                     }
                     dstOffset += (((idx.s1oIdx * s1CvInner + cBlockIdx % vecCalBlockNum * s1CalcInner) * n2 + idx.n2Idx) * g + idx.gIdx) * d;
                     copyOutDstStride = n2 * g * d - d;
-                } else if constexpr (INPUT_LAYOUT == BSND) {
+                } else if constexpr (INPUT_LAYOUT != TND) {
                     dstOffset = (((idx.bIdx * s1 + idx.s1oIdx * s1CvInner + cBlockIdx % vecCalBlockNum * s1CalcInner) * n2 + idx.n2Idx) * g + idx.gIdx) * d;
                     copyOutDstStride = n2 * g * d - d;
                 }
@@ -293,7 +293,7 @@ public:
                     }
                     dstOffset += ((idx.s2oIdx * s2CvInner + cBlockIdx % vecCalBlockNum * s2CalcInner) * n2 + idx.n2Idx) * d;
                     copyOutDstStride = n2 * d - d;
-                } else if constexpr (INPUT_LAYOUT == BSND) {
+                } else if constexpr (INPUT_LAYOUT != TND) {
                     dstOffset = ((idx.bIdx * s2 + idx.s2oIdx * s2CvInner + cBlockIdx % vecCalBlockNum * s2CalcInner) * n2 + idx.n2Idx) * d;
                     copyOutDstStride = n2 * d - d;
                 }

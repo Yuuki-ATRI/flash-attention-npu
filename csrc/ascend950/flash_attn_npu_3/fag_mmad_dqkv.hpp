@@ -197,7 +197,7 @@ public:
                 initDk, flushDk, enAtomicDk);
         } else {
             ComputeDqDkLargeHeadDim(dsNz, k, dq, dk,
-                sqActual, skvActual, dActual, taskPing, enAtomicDq);
+                sqActual, skvActual, dActual, taskPing, enAtomicDq, enAtomicDk);
         }
     }
 
@@ -221,7 +221,7 @@ public:
                 sqActual, skvActual, dvActual, taskPing, initDv, flushDv, enAtomicDv);
         } else {
             ComputeDvLargeHeadDim(pNz, dv,
-                sqActual, skvActual, dvActual, taskPing);
+                sqActual, skvActual, dvActual, taskPing, enAtomicDv);
         }
     }
 
@@ -279,10 +279,11 @@ protected:
         AscendC::LocalTensor<ElementA> dsNz,
         TensorK& k, TensorDq& dq, TensorDk& dk,
         uint32_t sqActual, uint32_t skvActual, uint32_t dActual,
-        uint32_t taskPing, bool enAtomicDq)
+        uint32_t taskPing, bool enAtomicDq, bool enAtomicDk)
     {
         // D>BASE: Fixpipe each D-slice. Q is full in L1 from C1; K streams
-        // slice-by-slice into the DY scratch slot.
+        // slice-by-slice into the DY scratch slot. Each GM slice honors
+        // overwrite on the first private-buffer contribution and atomic-add thereafter.
         const uint32_t sqRound = RoundUp<L1AAlignHelper::M_ALIGNED>(sqActual);
         const uint32_t skvRound = RoundUp<L1AAlignHelper::K_ALIGNED>(skvActual);
         const uint32_t dFullRound = RoundUp<L1BAlignHelper::N_ALIGNED>(dActual);
@@ -310,7 +311,7 @@ protected:
                 /*waitB=*/false, /*releaseB=*/lastSlice,
                 /*bNOff=*/nOff, /*bNFull=*/dFullRound);
             FixpipeTla(dkTile, l0CTensorList[SLOT_DK],
-                skvActual, nAct, skvRound, /*enAtomic=*/true, SLOT_DK);
+                skvActual, nAct, skvRound, enAtomicDk, SLOT_DK);
         }
     }
 
@@ -319,7 +320,7 @@ protected:
     void ComputeDvLargeHeadDim(
         AscendC::LocalTensor<ElementA> pNz, TensorDv& dv,
         uint32_t sqActual, uint32_t skvActual, uint32_t dvActual,
-        uint32_t taskPing)
+        uint32_t taskPing, bool enAtomicDv)
     {
         const uint32_t sqRound = RoundUp<L1AAlignHelper::M_ALIGNED>(sqActual);
         const uint32_t skvRound = RoundUp<L1AAlignHelper::K_ALIGNED>(skvActual);
@@ -338,7 +339,7 @@ protected:
                 /*waitB=*/false, /*releaseB=*/lastSlice,
                 /*bNOff=*/nOff, /*bNFull=*/dvFullRound);
             FixpipeTla(dvTile, l0CTensorList[SLOT_DV],
-                skvActual, nAct, skvRound, /*enAtomic=*/true, SLOT_DV);
+                skvActual, nAct, skvRound, enAtomicDv, SLOT_DV);
         }
     }
 

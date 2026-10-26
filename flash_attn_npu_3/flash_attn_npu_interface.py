@@ -410,6 +410,12 @@ def _flash_attn_backward(
     deterministic: bool = False,
     sm_margin: int = 0,
 ) -> torch.Tensor:
+    # Same storage detection as forward; retain logical BSND shapes for host/output.
+    if cu_seqlens_q is not None:
+        layout = _LAYOUT_TND
+    else:
+        layout = _detect_layout(q, k, v, None, cu_seqlens_k)[0]
+
     # dq, dk, dv are allocated by us so they should already be contiguous
     dout, q, k, v, out = [maybe_contiguous(x) for x in (dout, q, k, v, out)]
     (
@@ -440,6 +446,7 @@ def _flash_attn_backward(
         softcap,
         deterministic,
         sm_margin,
+        layout,
     )
     return softmax_d
 
@@ -470,53 +477,10 @@ def _flash_attn_backward_fake(
     sm_margin: int = 0,
 ) -> torch.Tensor:
 
-    is_varlen_q = cu_seqlens_q is not None
-    is_varlen_k = cu_seqlens_q is not None
-    is_varlen = is_varlen_q or is_varlen_k or sequed_q is not None or sequed_k is not None
-
-    if not is_varlen_q:
-        batch_size = q.size(0)
-        seqlen_q = q.size(1)
-        seqlen_k = k.size(1)
-        total_q = batch_size * q.size(1)
-    else:
-        batch_size = cu_seqlens_q.size(0) - 1
-        total_q = q.size(0)
-        seqlen_q = max_seqlen_q
-        seqlen_k = max_seqlen_k
-
-    if window_size_left >= seqlen_k - 1:
-        window_size_left = -1
-
-    if window_size_right >= seqlen_q - 1:
-        window_size_right = -1
-
-    if is_causal:
-        window_size_right = 0
-
-    is_causal = window_size_left < 0 and window_size_right == 0
-
-    kBlockM = 128
-
-    num_heads = q.shape[-2]
-    seqlen_q_rounded = round_multiple(seqlen_q, kBlockM)
-
-    total_q_padded_rounded = round_multiple(total_q + batch_size * kBlockM, kBlockM)
-
-    dq = torch.empty_like(q) if dq is None else dq
-    dk = torch.empty_like(k) if dk is None else dk
-    dv = torch.empty_like(v) if dv is None else dv
-
-    if not is_varlen:
-        softmax_d = torch.empty(
-            (batch_size, num_heads, seqlen_q_rounded), dtype=torch.float32, device=q.device
-        )
-    else:
-        softmax_d = torch.empty(
-            (num_heads, total_q_padded_rounded), dtype=torch.float32, device=q.device
-        )
-
-    return softmax_d
+    batch_size = q.size(0) if cu_seqlens_q is None else cu_seqlens_q.size(0) - 1
+    nheads = q.size(1) if cu_seqlens_q is not None else q.size(2)
+    seqlen_q = max_seqlen_q if cu_seqlens_q is not None else q.size(1)
+    return torch.empty((batch_size, nheads, seqlen_q), dtype=torch.float32, device=q.device)
 
 
 def setup_context(ctx, inputs, output):

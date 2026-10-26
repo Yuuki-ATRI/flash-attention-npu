@@ -55,7 +55,7 @@ struct BwdLaunchArgs {
 // Per-(dtype, layout) implementation, defined in
 // autogen/bwd_dispatch_<dtype>_<layout>.cpp via bwd_dispatch_common.hpp. Each TU
 // instantiates one bwd_dispatch_run<DType, kInputLayout> (16 FAGGeneral variants:
-// mask x deterministic x headdim). kInputLayout is BSND (0) or TND (1) from
+// mask x deterministic x headdim). kInputLayout is BSND (0), TND (1), or BNSD (2) from
 // fag_kernel_common.hpp.
 template <typename DType, uint32_t kInputLayout>
 void bwd_dispatch_run(const BwdLaunchArgs &a);

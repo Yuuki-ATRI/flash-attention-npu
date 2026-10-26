@@ -64,7 +64,16 @@ public:
         uint32_t coreNum = tilingData->coreNum;
         dAlign = (headdim + 15) / 16 * 16;
         cu_seq_qlen_addr = cu_seq_qlen;
-        n_stride = (nheads - 1) * headdim * sizeof(ElementVecDtype);
+        doutStrides = {tilingData->qSeqlen * nheads * headdim, nheads * headdim, headdim};
+        outStrides = doutStrides;
+        if constexpr (std::is_same_v<TilingData, FAGTilingData>) {
+            if (tilingData->inputStrides.enabled != 0) {
+                doutStrides = {tilingData->inputStrides.dout.batch, tilingData->inputStrides.dout.sequence,
+                              tilingData->inputStrides.dout.head};
+                outStrides = {tilingData->inputStrides.out.batch, tilingData->inputStrides.out.sequence,
+                              tilingData->inputStrides.out.head};
+            }
+        }
 
         // 计算 buffer 大小
         constexpr static uint32_t inputBufferLen = 24 * 1024;
@@ -74,7 +83,7 @@ public:
 
         // 计算单核的计算量
         int64_t normalAxisSize = 0;
-        if constexpr (INPUT_LAYOUT == BSND) {
+        if constexpr (INPUT_LAYOUT != TND) {
             seq_q = tilingData->qSeqlen;
             normalAxisSize = batch * nheads * seq_q;
         } else {
@@ -147,27 +156,31 @@ public:
     CATLASS_DEVICE
     void DoCopyIn(int64_t curS, int64_t curNBurst, int64_t dstOffset, GM_ADDR seqS)
     {
-        int64_t srcOffset = 0;
+        int64_t token = sIdx;
+        int64_t doBatch = bIdx * doutStrides.batch;
+        int64_t outBatch = bIdx * outStrides.batch;
         if constexpr (INPUT_LAYOUT == TND) {
-            int64_t bOffset = bIdx == 0 ? 0 : nheads * ((__gm__ int32_t *)seqS)[bIdx - 1] * headdim;
-            srcOffset = bOffset + (sIdx * nheads + nIdx) * headdim;
-            } else if constexpr (INPUT_LAYOUT == BSND) {
-                srcOffset = bIdx * (seq_q * nheads * headdim) + sIdx * (nheads * headdim) + nIdx * headdim;
+            token += bIdx == 0 ? 0 : ((__gm__ int32_t*)seqS)[bIdx - 1];
+            doBatch = 0;
+            outBatch = 0;
         }
-        DataCopyPad(input1Buf[dstOffset], doutGm[srcOffset],
+        const int64_t doOffset = doBatch + token * doutStrides.sequence + nIdx * doutStrides.head;
+        const int64_t outOffset = outBatch + token * outStrides.sequence + nIdx * outStrides.head;
+        DataCopyPad(input1Buf[dstOffset], doutGm[doOffset],
                     {static_cast<uint16_t>(curNBurst), static_cast<uint32_t>(headdim * sizeof(ElementVecDtype)),
-                    static_cast<uint32_t>(n_stride), 0, 0},
-                    {true, 0, static_cast<uint8_t>((dAlign - headdim)), 0});
-        DataCopyPad(input2Buf[dstOffset], outGm[srcOffset],
+                     static_cast<uint32_t>((doutStrides.sequence - headdim) * sizeof(ElementVecDtype)), 0, 0},
+                    {true, 0, static_cast<uint8_t>(dAlign - headdim), 0});
+        DataCopyPad(input2Buf[dstOffset], outGm[outOffset],
                     {static_cast<uint16_t>(curNBurst), static_cast<uint32_t>(headdim * sizeof(ElementVecDtype)),
-                    static_cast<uint32_t>(n_stride), 0, 0},
-                    {true, 0, static_cast<uint8_t>((dAlign - headdim)), 0});
+                     static_cast<uint32_t>((outStrides.sequence - headdim) * sizeof(ElementVecDtype)), 0, 0},
+                    {true, 0, static_cast<uint8_t>(dAlign - headdim), 0});
     }
 
     CATLASS_DEVICE
     void CopyInSfmg(int64_t leftNburst, int64_t &curS, GM_ADDR seqS)
     {
-        int64_t dstOffset = 0;
+        FagTensorStrides doutStrides, outStrides;
+    int64_t dstOffset = 0;
         while (leftNburst > 0) {
             int64_t curNburst = 0;
             if (curS - sIdx < leftNburst) { // 需要借N或借B
@@ -330,6 +343,7 @@ protected:
     int64_t nIdx = 0;
     int64_t sIdx = 0;
 
+    FagTensorStrides doutStrides, outStrides;
     int64_t dstOffset = 0;
     int64_t n_stride = 0;
 

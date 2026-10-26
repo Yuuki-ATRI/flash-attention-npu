@@ -67,21 +67,32 @@ public:
             const event_t mte2ToVEvent = slot == 0U ? mte2ToVPing : mte2ToVPong;
             const event_t vToMte3Event = slot == 0U ? vToMte3Ping : vToMte3Pong;
             const uint64_t remaining = rangeCount - done;
-            const uint32_t rows = static_cast<uint32_t>(
+            uint32_t rows = static_cast<uint32_t>(
                 remaining < tileRows ? remaining : tileRows);
             const uint64_t rowBegin = rangeBegin + done;
-            const uint64_t inputOffset = rowBegin * realD;
-            AscendC::DataCopyExtParams copyParams{
-                static_cast<uint16_t>(rows),
-                static_cast<uint32_t>(realD * sizeof(DataType)),
-                0, 0, 0};
-            AscendC::DataCopyPadExtParams<DataType> padParams{
-                false, 0, 0, 0};
+            // Iterate BNS (or N,T for packed input), stopping at a head-plane boundary.
+            const bool isTnd = tiling_->layout == static_cast<uint32_t>(FAGTiling950::Layout::TND);
+            const uint64_t plane = isTnd ? tiling_->totalQ : tiling_->qSeqlen;
+            const uint64_t token = rowBegin % plane;
+            const uint64_t head = rowBegin / plane % tiling_->qHeadNum;
+            const uint64_t batch = isTnd ? 0 : rowBegin / plane / tiling_->qHeadNum;
+            rows = rows < plane - token ? rows : static_cast<uint32_t>(plane - token);
+            const FagTensorStrides doStrides{tiling_->inputStrides.dout.batch, tiling_->inputStrides.dout.sequence,
+                                             tiling_->inputStrides.dout.head};
+            const FagTensorStrides outStrides{tiling_->inputStrides.out.batch, tiling_->inputStrides.out.sequence,
+                                             tiling_->inputStrides.out.head};
+            const uint64_t doOffset = batch * doStrides.batch + token * doStrides.sequence + head * doStrides.head;
+            const uint64_t outOffset = batch * outStrides.batch + token * outStrides.sequence + head * outStrides.head;
+            AscendC::DataCopyExtParams doCopy{
+                static_cast<uint16_t>(rows), static_cast<uint32_t>(realD * sizeof(DataType)),
+                static_cast<int64_t>((doStrides.sequence - realD) * sizeof(DataType)), 0, 0};
+            AscendC::DataCopyExtParams outCopy{
+                static_cast<uint16_t>(rows), static_cast<uint32_t>(realD * sizeof(DataType)),
+                static_cast<int64_t>((outStrides.sequence - realD) * sizeof(DataType)), 0, 0};
+            AscendC::DataCopyPadExtParams<DataType> padParams{false, 0, 0, 0};
             AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(mte3ToMte2Event);
-            AscendC::DataCopyPad(
-                doutUb_[slot], doutGm_[inputOffset], copyParams, padParams);
-            AscendC::DataCopyPad(
-                outUb_[slot], outGm_[inputOffset], copyParams, padParams);
+            AscendC::DataCopyPad(doutUb_[slot], doutGm_[doOffset], doCopy, padParams);
+            AscendC::DataCopyPad(outUb_[slot], outGm_[outOffset], outCopy, padParams);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(mte2ToVEvent);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(mte2ToVEvent);
 

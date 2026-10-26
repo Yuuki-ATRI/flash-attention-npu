@@ -11,6 +11,7 @@
 #ifndef FLASH_ATTN_NPU_ARCH35_V3_FAG_COMMON_H
 #define FLASH_ATTN_NPU_ARCH35_V3_FAG_COMMON_H
 
+#include "../../fag_tensor_strides.h"
 #include <cstdint>
 #include <type_traits>
 
@@ -37,6 +38,7 @@ constexpr uint32_t MAX_DTM_CHUNK_TASKS = 64;
 enum class Layout : uint32_t {
     BSND = 0,
     TND = 1,
+    BNSD = 2,
 };
 
 enum class MaskType : uint32_t {
@@ -90,6 +92,7 @@ struct FAGInfo {
 };
 
 struct FAGTilingData {
+    FagInputStrides inputStrides{};
     uint32_t layout = 0;
     uint32_t maskType = 0;
     uint32_t deterministic = 0;
@@ -100,7 +103,7 @@ struct FAGTilingData {
     uint32_t aivNum = 0;
     uint32_t usedCoreNum = 0;
     uint32_t continuousBlockNum = DEFAULT_CONTINUOUS_BLOCK_NUM;
-    uint32_t reserved0 = 0;
+    uint32_t detCastChunkRows = 0;
 
     uint64_t ubSize = 0;
     uint64_t batch = 0;
